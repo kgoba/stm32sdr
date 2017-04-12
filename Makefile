@@ -1,8 +1,8 @@
 TARGET          = binary
 LDSCRIPT        = stm32f446re.ld
 
-OPENCM3_DIR     = ../libopencm3
-CMSIS_DIR       = ../STM32Cube_FW_F4_V1.15.0/Drivers/CMSIS
+OPENCM3_DIR     = ./libopencm3
+CMSIS_DIR       = ./CMSIS/CMSIS
 
 OBJS            += main.o
 
