@@ -1,5 +1,6 @@
 *.bin
 *.elf
+*.lst
 *.o
 *.d
 build/

@@ -70,6 +70,8 @@ const float32_t coef_lowpassThird_127[] = {
 };
 
 static float32_t firState[BLOCK_SIZE + NUM_TAPS - 1];
+static float32_t firInput[BLOCK_SIZE];
+static float32_t firOutput[BLOCK_SIZE];
 
 int main()
 {
@@ -77,7 +79,12 @@ int main()
 
     arm_fir_init_f32(&S, NUM_TAPS, (float32_t *)&firCoeffs[0], &firState[0], BLOCK_SIZE);
 
+    float32_t a = 3.0f;
+    float32_t b = 0.0f;
     while (1) {
-
+       a /= 2;
+       if (a > 0.4f) b += a;
+       firInput[0] = b;
+       arm_fir_f32 (&S, firInput, firOutput, BLOCK_SIZE);
     }
 }
