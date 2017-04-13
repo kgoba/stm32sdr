@@ -4,7 +4,7 @@ LDSCRIPT        = stm32f446re.ld
 OPENCM3_DIR     = ./libopencm3
 CMSIS_DIR       = ./CMSIS/CMSIS
 
-OBJS            += main.o
+OBJS            += main.o coefs.o
 
 ARCH_FLAGS      += -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 LDLIBS          += -lopencm3_stm32f4
@@ -21,7 +21,7 @@ INCLUDES        += -I$(OPENCM3_DIR)/include
 LDFLAGS         += -L$(OPENCM3_DIR)/lib
 
 CFLAGS          += -Os -ggdb3 -ffunction-sections -fdata-sections $(INCLUDES) $(DEFINES)
-CXXFLAGS        += -Os -ggdb3 -ffunction-sections -fdata-sections $(INCLUDES) $(DEFINES)
+CXXFLAGS        += -Os -ggdb3 -ffunction-sections -fdata-sections -fno-rtti -fno-exceptions $(INCLUDES) $(DEFINES)
 CPPFLAGS        += -MD
 LDFLAGS         += -static -nostartfiles -Wl,--gc-sections
 LDLIBS          += -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
