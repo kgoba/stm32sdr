@@ -1,45 +1,29 @@
 TARGET          = binary
-LDSCRIPT        = stm32f446re.ld
+LDSCRIPT        = target/stm32f446re.ld
 
 OPENCM3_DIR     = ./libopencm3
 CMSIS_DIR       = ./CMSIS/CMSIS
 
-OBJS            += main.o coefs.o
+OBJS            += src/main.o src/coefs.o
 
-ARCH_FLAGS      += -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
-LDLIBS          += -lopencm3_stm32f4
-DEFINES         += -DSTM32F4
-
-#INCLUDES        += -I$(CMSIS_DIR)/Core/Include
-#INCLUDES        += -I$(CMSIS_DIR)/DSP/Include
-INCLUDES        += -I$(CMSIS_DIR)/Include
-LDFLAGS         += -L$(CMSIS_DIR)/Lib/GCC
-DEFINES         += -DARM_MATH_CM4 -D__FPU_PRESENT=1
-LDLIBS          += -larm_cortexM4lf_math
-
-INCLUDES        += -I$(OPENCM3_DIR)/include
-LDFLAGS         += -L$(OPENCM3_DIR)/lib
-
-CFLAGS          += -Os -ggdb3 -ffunction-sections -fdata-sections $(INCLUDES) $(DEFINES)
-CXXFLAGS        += -Os -ggdb3 -ffunction-sections -fdata-sections -fno-rtti -fno-exceptions $(INCLUDES) $(DEFINES)
-CPPFLAGS        += -MD
-LDFLAGS         += -static -nostartfiles -Wl,--gc-sections
-LDLIBS          += -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
-
+include target/stm32f446re.mk
 
 #include $(OPENCM3_DIR)/mk/genlink-config.mk
 include $(OPENCM3_DIR)/mk/gcc-config.mk
 
-.PHONY: clean all
+.PHONY: clean all dirs
 
-all: $(TARGET).bin $(TARGET).elf $(TARGET).lst
-	@arm-none-eabi-size $(TARGET).elf
+all: dirs .build/$(TARGET).bin .build/$(TARGET).elf .build/$(TARGET).lst
+	@arm-none-eabi-size .build/$(TARGET).elf
 
-$(TARGET).lst: $(TARGET).elf
+dirs:
+	@mkdir -p .build
+
+.build/$(TARGET).lst: .build/$(TARGET).elf
 	@arm-none-eabi-objdump -S $< >$@
 
 clean:
-	$(Q)$(RM) -rf $(TARGET).* *.o
+	$(Q)$(RM) .build/$(TARGET).* src/*.o src/*.d
 
 #include $(OPENCM3_DIR)/mk/genlink-rules.mk
 include $(OPENCM3_DIR)/mk/gcc-rules.mk
