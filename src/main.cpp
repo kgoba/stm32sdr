@@ -177,6 +177,30 @@ extern "C" {
  * AHB1 - DMA, GPIO
 */
 
+/*
+ * CS43L22
+ * 
+ * SDA  - PB9
+ * SCL  - PB6
+ * MCLK - PC7
+ * SCLK - PC10
+ * SDIN - PC12
+ * LRCK - PA4
+ * !RST - PD4
+ * 
+ * MP45DT02
+ * 
+ * DOUT - PC3
+ * CLK  - PB10
+ * 
+ * LED & BUTTONS
+ * USER - PA0
+ * LED3 - PD13 (orange)
+ * LED4 - PD12 (green)
+ * LED5 - PD14 (red)
+ * LED6 - PD15 (blue)
+ */
+
 int main()
 {
 
