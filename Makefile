@@ -4,7 +4,7 @@ LDSCRIPT        = target/stm32f446re.ld
 OPENCM3_DIR     = ./libopencm3
 CMSIS_DIR       = ./CMSIS/CMSIS
 
-OBJS            += src/main.o src/coefs.o
+OBJS            += src/main.o src/periph.o src/dsp.o src/coefs.o
 
 include target/stm32f446re.mk
 
