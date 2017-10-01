@@ -11,63 +11,60 @@
 #include <libopencm3/stm32/adc.h>
 #include <libopencm3/stm32/dac.h>
 
-static uint16_t read_adc_naiive(uint8_t channel)
-{
-    uint8_t channel_array[16];
-    channel_array[0] = channel;
-    adc_set_regular_sequence(ADC1, 1, channel_array);
-    adc_start_conversion_regular(ADC1);
-    while (!adc_eoc(ADC1));
-    uint16_t reg16 = adc_read_regular(ADC1);
-    return reg16;
+#include <arm_math.h>
+
+#define TWOPI   (2 * PI)
+
+void test_dac_sine(float frequency) {
+    static float phase1 = 0;
+    static float phase2 = 0;
+    static float phase3 = 0;
+    static float phase4 = 0;
+
+    static float x = 0;
+
+    float d_phase = TWOPI * frequency / ((float)SAMPLE_RATE_KHZ * 1000);
+
+    while (true) {
+        if (!dac_push(x)) break;
+        
+        //float ch1 = 0, ch2 = 0;
+        //adc_pull(ch1, ch2);
+        //x = 0.1f * sinf(phase1) + 0.9f * ch1;
+        x = sinf(phase1) + (sinf(phase2) / 3) + (sinf(phase3) / 5) + (sinf(phase4) / 7);        
+        
+        phase1 += d_phase;
+        phase2 += d_phase * 3;
+        phase3 += d_phase * 5;
+        phase4 += d_phase * 7;
+        if (phase1 > TWOPI) phase1 -= TWOPI;
+        if (phase2 > TWOPI) phase2 -= TWOPI;
+        if (phase3 > TWOPI) phase3 -= TWOPI;
+        if (phase4 > TWOPI) phase4 -= TWOPI;
+    }
 }
 
 int main()
 {
     init_globals();
-
     periph_setup();
 
+    uint32_t block_size = 256;
+    uint32_t length     = 255;
+    float b[length];
+    float work_area[length + block_size - 1];
+
+    //FIRFilter fir(b, length, work_area, block_size);
+    FastFIRFilter fir(b, length, work_area, block_size);
+
+    float samples[1024];
+    
     while (true) {
-    }
-
-    /*
-    usart_setup(&USART2_PA3_Periph, 9600);
-    
-    adc_setup(&ADC1_Periph);
-    //adc_setup(&ADC2_Periph);
-    //adc_set_multi_mode(ADC_CCR_MULTI_DUAL_REGULAR_SIMUL);
-
-    dac_setup(&DAC1_Periph);
-
-    dma_setup(&DAC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_8BIT, DMA_SxCR_PSIZE_8BIT );
-    dma_setup(&ADC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_16BIT, DMA_SxCR_PSIZE_16BIT );
-    
-    //arm_fir_instance_f32 S;
-    //arm_fir_init_f32(&S, NUM_TAPS, (float *)&firCoeffs[0], &firState[0], BLOCK_SIZE);
-    while (1) {
-        /*
-        uint16_t input_adc0 = read_adc_naiive(0);
-        uint16_t target = input_adc0 / 2;
-        dac_load_data_buffer_single(target, RIGHT12, CHANNEL_2);
-        dac_software_trigger(CHANNEL_2);
-        uint16_t input_adc1 = read_adc_naiive(1);
-        
-        //firInput[0] = b;
-        //arm_fir_f32 (&S, firInput, firOutput, BLOCK_SIZE);
-    }
-    */
-}
-
-/* ISR routines have to use C conventions to be linked properly */
-extern "C" {
-    void dma1_stream5_isr(void)
-    {
-        /* The ISR simply provides a test output for a CRO trigger */
-        if (dma_get_interrupt_flag(DMA1, DMA_STREAM5, DMA_TCIF)) {
-            dma_clear_interrupt_flags(DMA1, DMA_STREAM5, DMA_TCIF);
-            /* Toggle PC1 just to keep aware of activity and frequency. */
-            gpio_toggle(GPIOC, GPIO1);
-        }  
+        for (uint8_t i = 0; i < 100; i++) {
+            test_dac_sine(100.0f);
+            fir.process(samples, 1024, 1);   // 2.0-2.3 ms per 1024 samples
+            gpio_toggle(GPIOB, GPIO3);  /* D3  */
+        }
+        gpio_toggle(GPIOA, GPIO5);  /* LED */
     }
 }

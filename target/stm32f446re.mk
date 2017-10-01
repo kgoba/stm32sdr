@@ -7,7 +7,7 @@ DEFINES         += -DSTM32F4
 INCLUDES        += -I$(CMSIS_DIR)/Include
 LDFLAGS         += -L$(CMSIS_DIR)/Lib/GCC
 DEFINES         += -DARM_MATH_CM4 -D__FPU_PRESENT=1
-LDLIBS          += -larm_cortexM4lf_math
+LDLIBS          += -larm_cortexM4lf_math -lm
 
 INCLUDES        += -I$(OPENCM3_DIR)/include
 LDFLAGS         += -L$(OPENCM3_DIR)/lib

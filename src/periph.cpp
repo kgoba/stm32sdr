@@ -1,4 +1,5 @@
 #include "periph.h"
+#include "fifo.h"
 
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/stm32/gpio.h>
@@ -10,12 +11,13 @@
 #include <libopencm3/stm32/dac.h>
 
 /* Timer 2 count period, 16 kHz for a 168 MHz APB1 clock */
-#define TIMER_PERIOD        (168000 / SAMPLE_RATE_KHZ)
+#define TIMER_PERIOD        (42000 / SAMPLE_RATE_KHZ)
 
-#define DAC_DMA_BUFFER_SIZE     256
+static uint16_t DAC_DMA_buffer[DAC_DMA_BUFFER_SIZE];
+static uint32_t ADC_DMA_buffer[ADC_DMA_BUFFER_SIZE];
 
-static uint8_t g_DAC_DMA_buffer[DAC_DMA_BUFFER_SIZE];
-
+static FIFO<uint16_t, DAC_QUEUE_SIZE> dac_ch1_queue;
+static FIFO<uint32_t, ADC_QUEUE_SIZE> adc_ch1_2_queue;
 
 // http://diydsp.com/livesite/pages/stm32f4#Examples_ADC
 
@@ -249,10 +251,15 @@ static void clock_setup(void)
 
 static void gpio_setup()
 {
-    rcc_periph_clock_enable(RCC_GPIOC);
-    /* Set the digital test output on PC1 */
-    gpio_mode_setup(GPIOC, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO1);
-    gpio_set_output_options(GPIOC, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO1);
+    rcc_periph_clock_enable(RCC_GPIOA);
+    /* Set the digital test output on PA5 */
+    gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO5);
+    gpio_set_output_options(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO5);
+
+    rcc_periph_clock_enable(RCC_GPIOB);
+    /* Set the digital test output on PB3 and PB5 */
+    gpio_mode_setup(GPIOB, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO3 | GPIO4 | GPIO5);
+    gpio_set_output_options(GPIOB, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO3 | GPIO4 | GPIO5);
 }
 
 static void timer_setup(void)
@@ -281,40 +288,98 @@ static void timer_setup(void)
 static void dac_setup()
 {
     rcc_periph_clock_enable(RCC_GPIOA);
-    /* Set PA4 for DAC channel 1 to analogue, ignoring drive mode. */
+    /* Set PA4/5 for DAC channel 1/2 to analogue, ignoring drive mode. */
     gpio_mode_setup(GPIOA, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO4);
     
     rcc_periph_clock_enable(RCC_DAC);
-    /* Setup the DAC channel 1, with timer 2 as trigger source.
-     * Assume the DAC has woken up by the time the first transfer occurs */
+    /* Setup DAC channel 1, with timer 2 as trigger source. */
     dac_trigger_enable(CHANNEL_1);
     dac_set_trigger_source(DAC_CR_TSEL1_T2);    // TIM2_TRGO event
     dac_dma_enable(CHANNEL_1);
     dac_enable(CHANNEL_1);
-}
 
-static void dma_setup(void)
-{
 	/* DAC channel 1 uses DMA controller 1 Stream 5 Channel 7. */
-	/* Enable DMA1 clock and IRQ */
 	rcc_periph_clock_enable(RCC_DMA1);
 	nvic_enable_irq(NVIC_DMA1_STREAM5_IRQ);
 	dma_stream_reset(DMA1, DMA_STREAM5);
-	dma_set_priority(DMA1, DMA_STREAM5, DMA_SxCR_PL_LOW);
-	dma_set_memory_size(DMA1, DMA_STREAM5, DMA_SxCR_MSIZE_8BIT);
-	dma_set_peripheral_size(DMA1, DMA_STREAM5, DMA_SxCR_PSIZE_8BIT);
+	dma_set_priority(DMA1, DMA_STREAM5, DMA_SxCR_PL_MEDIUM);
+	dma_set_memory_size(DMA1, DMA_STREAM5, DMA_SxCR_MSIZE_16BIT);
+	dma_set_peripheral_size(DMA1, DMA_STREAM5, DMA_SxCR_PSIZE_16BIT);
 	dma_enable_memory_increment_mode(DMA1, DMA_STREAM5);
 	dma_enable_circular_mode(DMA1, DMA_STREAM5);
 	dma_set_transfer_mode(DMA1, DMA_STREAM5, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-	/* The register to target is the DAC1 8-bit right justified data
-	   register */
-	dma_set_peripheral_address(DMA1, DMA_STREAM5, (uint32_t) &DAC_DHR8R1);
-	/* The array v[] is filled with the waveform data to be output */
-	dma_set_memory_address(DMA1, DMA_STREAM5, (uint32_t) g_DAC_DMA_buffer);
+	/* DAC1 12-bit right justified data register for dual channel */
+	dma_set_peripheral_address(DMA1, DMA_STREAM5, (uint32_t) &DAC_DHR12R1);
+	dma_set_memory_address(DMA1, DMA_STREAM5, (uint32_t) DAC_DMA_buffer);
 	dma_set_number_of_data(DMA1, DMA_STREAM5, DAC_DMA_BUFFER_SIZE);
-	dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM5);
+    dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM5);
+    dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM5);    
 	dma_channel_select(DMA1, DMA_STREAM5, DMA_SxCR_CHSEL_7);
 	dma_enable_stream(DMA1, DMA_STREAM5);
+}
+
+static void adc_setup()
+{
+    rcc_periph_clock_enable(RCC_GPIOA);
+	gpio_mode_setup(GPIOA, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO0 | GPIO1);
+
+    rcc_periph_clock_enable(RCC_ADC1);
+    rcc_periph_clock_enable(RCC_ADC2);
+    adc_power_off(ADC1);
+    adc_power_off(ADC2);
+    adc_set_clk_prescale(ADC_CCR_ADCPRE_BY8);
+
+    adc_disable_scan_mode(ADC1);
+    adc_disable_scan_mode(ADC2);
+    adc_set_single_conversion_mode(ADC1);
+    adc_set_single_conversion_mode(ADC2);
+    adc_set_sample_time_on_all_channels(ADC1, ADC_SMPR_SMP_84CYC);
+    adc_set_sample_time_on_all_channels(ADC2, ADC_SMPR_SMP_84CYC);
+    adc_set_right_aligned(ADC1);
+    adc_set_right_aligned(ADC2);
+    adc_set_resolution(ADC1, ADC_CR1_RES_12BIT);
+    adc_set_resolution(ADC2, ADC_CR1_RES_12BIT);
+
+    uint8_t sequence1[] = { ADC_CHANNEL0 };
+    uint8_t sequence2[] = { ADC_CHANNEL1 };
+    adc_set_regular_sequence(ADC1, 1, sequence1);
+    adc_set_regular_sequence(ADC2, 1, sequence2);
+
+    /* Enable dual simultaneous conversion and DMA mode 2 */
+    adc_set_multi_mode(ADC_CCR_MULTI_DUAL_REGULAR_SIMUL | ADC_CCR_DMA_MODE_2);
+
+    adc_enable_external_trigger_regular(ADC1, 
+        ADC_CR2_EXTSEL_TIM2_TRGO, 
+        ADC_CR2_EXTEN_RISING_EDGE);    // TIM2_TRGO event
+    /* Enable DMA continuation after last conversion - for circular mode */
+    adc_set_dma_continue(ADC1);
+    adc_enable_dma(ADC1);
+    adc_power_on(ADC1);
+    adc_power_on(ADC2);
+    
+    /* ADC1 uses DMA controller 2 Stream 0/4 Channel 0. */
+	rcc_periph_clock_enable(RCC_DMA2);
+	nvic_enable_irq(NVIC_DMA2_STREAM0_IRQ);
+	dma_stream_reset(DMA2, DMA_STREAM0);
+    dma_set_priority(DMA2, DMA_STREAM0, DMA_SxCR_PL_MEDIUM);
+    /* Configure memory/peripheral */
+    /* Normally use ADC1_DR as 16-bit right justified data register */
+    /* Note that in dual mode we use ADC_CDR, which in DMA mode 2 contains 32 bits of data */
+    dma_set_memory_size(DMA2, DMA_STREAM0, DMA_SxCR_MSIZE_32BIT);
+	dma_set_peripheral_size(DMA2, DMA_STREAM0, DMA_SxCR_PSIZE_32BIT);
+	dma_set_peripheral_address(DMA2, DMA_STREAM0, (uint32_t) &ADC_CDR);
+	dma_set_memory_address(DMA2, DMA_STREAM0, (uint32_t) ADC_DMA_buffer);
+	dma_set_number_of_data(DMA2, DMA_STREAM0, ADC_DMA_BUFFER_SIZE);
+    //dma_enable_double_buffer_mode(DMA2, DMA_STREAM0);
+    //dma_set_memory_address_1(DMA2, DMA_STREAM0, (uint32_t) ADC_DMA_buffer2);
+
+    dma_enable_memory_increment_mode(DMA2, DMA_STREAM0);
+	dma_enable_circular_mode(DMA2, DMA_STREAM0);
+	dma_set_transfer_mode(DMA2, DMA_STREAM0, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
+	dma_enable_transfer_complete_interrupt(DMA2, DMA_STREAM0);
+	dma_enable_half_transfer_interrupt(DMA2, DMA_STREAM0);
+	dma_channel_select(DMA2, DMA_STREAM0, DMA_SxCR_CHSEL_0);
+    dma_enable_stream(DMA2, DMA_STREAM0);
 }
 
 void periph_setup()
@@ -322,27 +387,111 @@ void periph_setup()
     clock_setup();
 	gpio_setup();
 	timer_setup();
-	dma_setup();
-	dac_setup();
+    dac_setup();
+    adc_setup();
+
+    /*
+    usart_setup(&USART2_PA3_Periph, 9600);
+    
+    adc_setup(&ADC1_Periph);
+    //adc_setup(&ADC2_Periph);
+    //adc_set_multi_mode(ADC_CCR_MULTI_DUAL_REGULAR_SIMUL);
+
+    dac_setup(&DAC1_Periph);
+
+    dma_setup(&DAC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_8BIT, DMA_SxCR_PSIZE_8BIT );
+    dma_setup(&ADC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_16BIT, DMA_SxCR_PSIZE_16BIT );
+    */
 }
+
+#include <math.h>
 
 void init_globals()
 {
 	/* Fill the array with funky waveform data */
-	/* This is for single channel 8-bit right aligned */
+	/* This is for single channel 12-bit right aligned */
 	uint16_t i, x;
 	for (i = 0; i < DAC_DMA_BUFFER_SIZE; i++) {
-		if (i < 10) {
-			x = 10;
-		} else if (i < 121) {
-			x = 10 + ((i*i) >> 7);
-		} else if (i < 170) {
-			x = i/2;
-		} else if (i < 246) {
-			x = i + (80 - i/2);
-		} else {
-			x = 10;
-		}
-		g_DAC_DMA_buffer[i] = x;
+        uint16_t ch1 = 4095.0f * (1.0f + sinf(10.0f * i * 2 * (float)M_PI / DAC_DMA_BUFFER_SIZE)) / 2;
+		DAC_DMA_buffer[i] = ch1;
 	}
+}
+
+bool dac_push(float ch1) {
+    uint16_t ch1_raw = 2048 + 2047 * ch1;
+    return dac_ch1_queue.put(ch1_raw);
+}
+
+bool adc_pull(float &ch1, float &ch2) {
+    uint32_t ch1_2_raw;
+    if (!adc_ch1_2_queue.get(ch1_2_raw)) {
+        return false;
+    }
+    uint16_t ch1_raw = (ch1_2_raw & 0x0FFF);
+    uint16_t ch2_raw = (ch1_2_raw >> 16) & 0x0FFF;
+    ch1 = ((int16_t)ch1_raw - 2048) / 2048.0f;
+    ch2 = ((int16_t)ch2_raw - 2048) / 2048.0f;
+    return true;
+}
+
+static void fill_dac_dma_buffer(int idx_from, int idx_to) {
+    for (int idx = idx_from; idx < idx_to; idx++) {
+        uint16_t value = 0;
+        if (!dac_ch1_queue.get(value)) {
+            // FIFO underrun
+        }
+        DAC_DMA_buffer[idx] = value;
+    }
+}
+
+static void fill_adc_dma_buffer(int idx_from, int idx_to) {
+    for (int idx = idx_from; idx < idx_to; idx++) {
+        uint32_t value = ADC_DMA_buffer[idx];
+        if (!adc_ch1_2_queue.put(value)) {
+            // FIFO overrun
+        }
+    }
+}
+
+/* ISR routines have to use C conventions to be linked properly */
+extern "C" {
+    // DAC DMA transfer interrupt
+    void dma1_stream5_isr(void)
+    {
+        /* The ISR simply provides a test output for a CRO trigger */
+        if (dma_get_interrupt_flag(DMA1, DMA_STREAM5, DMA_TCIF)) {
+            /* Transfer complete */
+            dma_clear_interrupt_flags(DMA1, DMA_STREAM5, DMA_TCIF);
+            /* Fill the second half of the DMA buffer from the FIFO */
+            fill_dac_dma_buffer(DAC_DMA_BUFFER_SIZE / 2, DAC_DMA_BUFFER_SIZE);
+            /* Toggle PB4 just to keep aware of activity and frequency. */
+            gpio_toggle(GPIOB, GPIO4);  /* D5  */
+        }
+        if (dma_get_interrupt_flag(DMA1, DMA_STREAM5, DMA_HTIF)) {
+            /* Half of transfer complete */
+            dma_clear_interrupt_flags(DMA1, DMA_STREAM5, DMA_HTIF);
+            /* Fill the first half of the DMA buffer from the FIFO */
+            fill_dac_dma_buffer(0, DAC_DMA_BUFFER_SIZE / 2);
+        }
+    }
+
+    // ADC DMA transfer interrupt
+    void dma2_stream0_isr(void)
+    {
+        /* The ISR simply provides a test output for a CRO trigger */
+        if (dma_get_interrupt_flag(DMA2, DMA_STREAM0, DMA_TCIF)) {
+            /* Transfer complete */
+            dma_clear_interrupt_flags(DMA2, DMA_STREAM0, DMA_TCIF);
+            /* Append the second half of the DMA buffer to the FIFO */
+            fill_adc_dma_buffer(ADC_DMA_BUFFER_SIZE / 2, ADC_DMA_BUFFER_SIZE);
+            /* Toggle PB5 just to keep aware of activity and frequency. */
+            gpio_toggle(GPIOB, GPIO5);  /* D4  */
+        }  
+        if (dma_get_interrupt_flag(DMA2, DMA_STREAM0, DMA_HTIF)) {
+            /* Half of transfer complete */
+            dma_clear_interrupt_flags(DMA2, DMA_STREAM0, DMA_HTIF);
+            /* Append the first half of the DMA buffer to the FIFO */
+            fill_adc_dma_buffer(0, ADC_DMA_BUFFER_SIZE / 2);
+        }
+    }
 }
