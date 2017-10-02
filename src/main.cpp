@@ -44,9 +44,37 @@ void test_dac_sine(float frequency) {
     }
 }
 
+void ssb_demod_weaver() {
+	float coeff_lp_1400_10k[200];
+	float work_area1[200], work_area2[200];
+
+	FastFIRFilter fir1(coeff_lp_1400_10k, 200, work_area1, DSP_BLOCK_SIZE);
+	FastFIRFilter fir2(coeff_lp_1400_10k, 200, work_area2, DSP_BLOCK_SIZE);
+	NCOMixer      nco1(SSB_WEAVER_FREQ, SAMPLE_RATE_KHZ * 1000);
+	NCOMixer      nco2(SSB_WEAVER_FREQ, SAMPLE_RATE_KHZ * 1000, PI/2);
+
+	float ch1[DSP_BLOCK_SIZE];
+	float ch2[DSP_BLOCK_SIZE];
+    //adc_pull(ch1, ch2);
+
+	// Lowpass I and Q
+	fir1.process(ch1, DSP_BLOCK_SIZE);
+	fir2.process(ch2, DSP_BLOCK_SIZE);
+
+	// Shift frequency and phase
+	nco1.process(ch1, DSP_BLOCK_SIZE);
+	nco2.process(ch2, DSP_BLOCK_SIZE);
+
+	// Add I and Q to suppress one sideband
+	for (int i = 0; i < DSP_BLOCK_SIZE; i++) {
+		ch1[i] += ch2[i];
+	}
+
+	//dac_push(ch1);
+}
+
 int main()
 {
-    init_globals();
     periph_setup();
 
     uint32_t block_size = 256;

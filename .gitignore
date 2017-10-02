@@ -5,3 +5,6 @@
 *.d
 .build/
 .vscode/
+.cproject
+.project
+.settings/

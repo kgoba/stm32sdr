@@ -2,6 +2,8 @@
 
 #define SAMPLE_RATE_KHZ     10.000f
 
+#define SSB_WEAVER_FREQ		1400.0f
+
 #define DSP_BLOCK_SIZE      32
 
 /// Number of frames in the DAC input buffer 

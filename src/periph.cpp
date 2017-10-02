@@ -89,7 +89,7 @@ static FIFO<uint32_t, ADC_QUEUE_SIZE> adc_ch1_2_queue;
  * LED6 - PD15 (blue)
  */
 
-typedef struct {
+struct USARTPeriphSpec {
     enum rcc_periph_clken clock;
     enum rcc_periph_clken gpioClock;
     uint32_t    usart;
@@ -97,25 +97,25 @@ typedef struct {
     uint8_t     gpioAltFunc;
     uint16_t    gpioRX;
     uint16_t    gpioTX;
-} USARTPeriphSpec;
+};
 
-typedef struct {
+struct ADCPeriphSpec {
     enum rcc_periph_clken clock;
     enum rcc_periph_clken gpioClock;
     uint32_t    adc;
     uint32_t    gpioPort;
     uint16_t    gpioMask;
-} ADCPeriphSpec;
+};
 
-typedef struct {
+struct DACPeriphSpec {
     enum rcc_periph_clken clock;
     enum rcc_periph_clken gpioClock;
     data_channel channel;
     uint32_t    gpioPort;
     uint16_t    gpioMask;
-} DACPeriphSpec;
+};
 
-typedef struct {
+struct DMAPeriphSpec {
     enum rcc_periph_clken clock;
     uint8_t     irq;
     uint32_t    dma;
@@ -123,7 +123,7 @@ typedef struct {
     uint32_t    channel;
     uint32_t    direction;
     volatile void *reg;
-} DMAPeriphSpec;
+};
 
 static void usart_setup(const USARTPeriphSpec *periph, uint32_t baudrate)
 {
@@ -138,11 +138,11 @@ static void usart_setup(const USARTPeriphSpec *periph, uint32_t baudrate)
     }
 
     rcc_periph_clock_enable(periph->clock);
-	usart_set_baudrate(periph->usart, baudrate);
-	usart_set_databits(periph->usart, 8);
-	usart_set_stopbits(periph->usart, USART_STOPBITS_1);
-	usart_set_parity(periph->usart, USART_PARITY_NONE);
-	usart_set_flow_control(periph->usart, USART_FLOWCONTROL_NONE);
+    usart_set_baudrate(periph->usart, baudrate);
+    usart_set_databits(periph->usart, 8);
+    usart_set_stopbits(periph->usart, USART_STOPBITS_1);
+    usart_set_parity(periph->usart, USART_PARITY_NONE);
+    usart_set_flow_control(periph->usart, USART_FLOWCONTROL_NONE);
 
     if (periph->gpioTX && periph->gpioRX)
         usart_set_mode(periph->usart, USART_MODE_TX_RX);
@@ -153,65 +153,65 @@ static void usart_setup(const USARTPeriphSpec *periph, uint32_t baudrate)
             usart_set_mode(periph->usart, USART_MODE_TX);
     }
     
-	usart_enable(periph->usart);
+    usart_enable(periph->usart);
 }
 
 void adc_setup(const ADCPeriphSpec *periph)
 {
     rcc_periph_clock_enable(periph->gpioClock);
-	gpio_mode_setup(periph->gpioPort, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, periph->gpioMask);
+    gpio_mode_setup(periph->gpioPort, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, periph->gpioMask);
 
     rcc_periph_clock_enable(periph->clock);
-	adc_power_off(periph->adc);
-	adc_disable_scan_mode(periph->adc);
-	adc_set_sample_time_on_all_channels(periph->adc, ADC_SMPR_SMP_3CYC);
+    adc_power_off(periph->adc);
+    adc_disable_scan_mode(periph->adc);
+    adc_set_sample_time_on_all_channels(periph->adc, ADC_SMPR_SMP_3CYC);
 
-	adc_power_on(periph->adc);
+    adc_power_on(periph->adc);
 }
 
 void dac_setup(const DACPeriphSpec *periph)
 {
     rcc_periph_clock_enable(periph->gpioClock);
-	gpio_mode_setup(periph->gpioPort, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, periph->gpioMask);
+    gpio_mode_setup(periph->gpioPort, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, periph->gpioMask);
     
     rcc_periph_clock_enable(periph->clock);
-	dac_disable(periph->channel);
-	dac_disable_waveform_generation(periph->channel);
-	dac_set_trigger_source(DAC_CR_TSEL2_SW);
-	dac_enable(periph->channel);
+    dac_disable(periph->channel);
+    dac_disable_waveform_generation(periph->channel);
+    dac_set_trigger_source(DAC_CR_TSEL2_SW);
+    dac_enable(periph->channel);
 }
 
 
 static void dma_setup(const DMAPeriphSpec *periph, 
     void *buffer, void *buffer1, uint32_t bufSize, uint32_t memSize, uint32_t periphSize)
 {
-	rcc_periph_clock_enable(periph->clock);
-	nvic_enable_irq(periph->irq);
+    rcc_periph_clock_enable(periph->clock);
+    nvic_enable_irq(periph->irq);
     
-	dma_stream_reset(periph->dma, periph->stream);
-	dma_set_priority(periph->dma, periph->stream, DMA_SxCR_PL_LOW);
+    dma_stream_reset(periph->dma, periph->stream);
+    dma_set_priority(periph->dma, periph->stream, DMA_SxCR_PL_LOW);
 
-	dma_set_memory_size(periph->dma, periph->stream, memSize);
-	dma_set_peripheral_size(periph->dma, periph->stream, periphSize);
-	dma_enable_memory_increment_mode(periph->dma, periph->stream);
-	dma_set_transfer_mode(periph->dma, periph->stream, periph->direction);
+    dma_set_memory_size(periph->dma, periph->stream, memSize);
+    dma_set_peripheral_size(periph->dma, periph->stream, periphSize);
+    dma_enable_memory_increment_mode(periph->dma, periph->stream);
+    dma_set_transfer_mode(periph->dma, periph->stream, periph->direction);
 
     if (buffer1)
         dma_enable_double_buffer_mode(periph->dma, periph->stream);
     else 
         dma_enable_circular_mode(periph->dma, periph->stream);
 
-	/* The register to target is the DAC1 8-bit right justified data register */
-	dma_set_peripheral_address(periph->dma, periph->stream, (uint32_t) periph->reg);
+    /* The register to target is the DAC1 8-bit right justified data register */
+    dma_set_peripheral_address(periph->dma, periph->stream, (uint32_t) periph->reg);
 
-	dma_set_memory_address(periph->dma, periph->stream, (uint32_t) buffer);
+    dma_set_memory_address(periph->dma, periph->stream, (uint32_t) buffer);
     if (buffer1)
         dma_set_memory_address_1(periph->dma, periph->stream, (uint32_t) buffer1);
-	dma_set_number_of_data(periph->dma, periph->stream, bufSize);
+    dma_set_number_of_data(periph->dma, periph->stream, bufSize);
 
-	dma_enable_transfer_complete_interrupt(periph->dma, periph->stream);
-	dma_channel_select(periph->dma, periph->stream, periph->channel);
-	dma_enable_stream(periph->dma, periph->stream);
+    dma_enable_transfer_complete_interrupt(periph->dma, periph->stream);
+    dma_channel_select(periph->dma, periph->stream, periph->channel);
+    dma_enable_stream(periph->dma, periph->stream);
 }
 
 //const USARTPeriphSpec USART4_PA1_Periph = { RCC_USART4, RCC_GPIOA, USART4, GPIOA, GPIO_AF8, GPIO0, GPIO1 };
@@ -298,30 +298,30 @@ static void dac_setup()
     dac_dma_enable(CHANNEL_1);
     dac_enable(CHANNEL_1);
 
-	/* DAC channel 1 uses DMA controller 1 Stream 5 Channel 7. */
-	rcc_periph_clock_enable(RCC_DMA1);
-	nvic_enable_irq(NVIC_DMA1_STREAM5_IRQ);
-	dma_stream_reset(DMA1, DMA_STREAM5);
-	dma_set_priority(DMA1, DMA_STREAM5, DMA_SxCR_PL_MEDIUM);
-	dma_set_memory_size(DMA1, DMA_STREAM5, DMA_SxCR_MSIZE_16BIT);
-	dma_set_peripheral_size(DMA1, DMA_STREAM5, DMA_SxCR_PSIZE_16BIT);
-	dma_enable_memory_increment_mode(DMA1, DMA_STREAM5);
-	dma_enable_circular_mode(DMA1, DMA_STREAM5);
-	dma_set_transfer_mode(DMA1, DMA_STREAM5, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-	/* DAC1 12-bit right justified data register for dual channel */
-	dma_set_peripheral_address(DMA1, DMA_STREAM5, (uint32_t) &DAC_DHR12R1);
-	dma_set_memory_address(DMA1, DMA_STREAM5, (uint32_t) DAC_DMA_buffer);
-	dma_set_number_of_data(DMA1, DMA_STREAM5, DAC_DMA_BUFFER_SIZE);
+    /* DAC channel 1 uses DMA controller 1 Stream 5 Channel 7. */
+    rcc_periph_clock_enable(RCC_DMA1);
+    nvic_enable_irq(NVIC_DMA1_STREAM5_IRQ);
+    dma_stream_reset(DMA1, DMA_STREAM5);
+    dma_set_priority(DMA1, DMA_STREAM5, DMA_SxCR_PL_MEDIUM);
+    dma_set_memory_size(DMA1, DMA_STREAM5, DMA_SxCR_MSIZE_16BIT);
+    dma_set_peripheral_size(DMA1, DMA_STREAM5, DMA_SxCR_PSIZE_16BIT);
+    dma_enable_memory_increment_mode(DMA1, DMA_STREAM5);
+    dma_enable_circular_mode(DMA1, DMA_STREAM5);
+    dma_set_transfer_mode(DMA1, DMA_STREAM5, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
+    /* DAC1 12-bit right justified data register for dual channel */
+    dma_set_peripheral_address(DMA1, DMA_STREAM5, (uint32_t) &DAC_DHR12R1);
+    dma_set_memory_address(DMA1, DMA_STREAM5, (uint32_t) DAC_DMA_buffer);
+    dma_set_number_of_data(DMA1, DMA_STREAM5, DAC_DMA_BUFFER_SIZE);
     dma_enable_transfer_complete_interrupt(DMA1, DMA_STREAM5);
     dma_enable_half_transfer_interrupt(DMA1, DMA_STREAM5);    
-	dma_channel_select(DMA1, DMA_STREAM5, DMA_SxCR_CHSEL_7);
-	dma_enable_stream(DMA1, DMA_STREAM5);
+    dma_channel_select(DMA1, DMA_STREAM5, DMA_SxCR_CHSEL_7);
+    dma_enable_stream(DMA1, DMA_STREAM5);
 }
 
 static void adc_setup()
 {
     rcc_periph_clock_enable(RCC_GPIOA);
-	gpio_mode_setup(GPIOA, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO0 | GPIO1);
+    gpio_mode_setup(GPIOA, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, GPIO0 | GPIO1);
 
     rcc_periph_clock_enable(RCC_ADC1);
     rcc_periph_clock_enable(RCC_ADC2);
@@ -358,35 +358,35 @@ static void adc_setup()
     adc_power_on(ADC2);
     
     /* ADC1 uses DMA controller 2 Stream 0/4 Channel 0. */
-	rcc_periph_clock_enable(RCC_DMA2);
-	nvic_enable_irq(NVIC_DMA2_STREAM0_IRQ);
-	dma_stream_reset(DMA2, DMA_STREAM0);
+    rcc_periph_clock_enable(RCC_DMA2);
+    nvic_enable_irq(NVIC_DMA2_STREAM0_IRQ);
+    dma_stream_reset(DMA2, DMA_STREAM0);
     dma_set_priority(DMA2, DMA_STREAM0, DMA_SxCR_PL_MEDIUM);
     /* Configure memory/peripheral */
     /* Normally use ADC1_DR as 16-bit right justified data register */
     /* Note that in dual mode we use ADC_CDR, which in DMA mode 2 contains 32 bits of data */
     dma_set_memory_size(DMA2, DMA_STREAM0, DMA_SxCR_MSIZE_32BIT);
-	dma_set_peripheral_size(DMA2, DMA_STREAM0, DMA_SxCR_PSIZE_32BIT);
-	dma_set_peripheral_address(DMA2, DMA_STREAM0, (uint32_t) &ADC_CDR);
-	dma_set_memory_address(DMA2, DMA_STREAM0, (uint32_t) ADC_DMA_buffer);
-	dma_set_number_of_data(DMA2, DMA_STREAM0, ADC_DMA_BUFFER_SIZE);
+    dma_set_peripheral_size(DMA2, DMA_STREAM0, DMA_SxCR_PSIZE_32BIT);
+    dma_set_peripheral_address(DMA2, DMA_STREAM0, (uint32_t) &ADC_CDR);
+    dma_set_memory_address(DMA2, DMA_STREAM0, (uint32_t) ADC_DMA_buffer);
+    dma_set_number_of_data(DMA2, DMA_STREAM0, ADC_DMA_BUFFER_SIZE);
     //dma_enable_double_buffer_mode(DMA2, DMA_STREAM0);
     //dma_set_memory_address_1(DMA2, DMA_STREAM0, (uint32_t) ADC_DMA_buffer2);
 
     dma_enable_memory_increment_mode(DMA2, DMA_STREAM0);
-	dma_enable_circular_mode(DMA2, DMA_STREAM0);
-	dma_set_transfer_mode(DMA2, DMA_STREAM0, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
-	dma_enable_transfer_complete_interrupt(DMA2, DMA_STREAM0);
-	dma_enable_half_transfer_interrupt(DMA2, DMA_STREAM0);
-	dma_channel_select(DMA2, DMA_STREAM0, DMA_SxCR_CHSEL_0);
+    dma_enable_circular_mode(DMA2, DMA_STREAM0);
+    dma_set_transfer_mode(DMA2, DMA_STREAM0, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
+    dma_enable_transfer_complete_interrupt(DMA2, DMA_STREAM0);
+    dma_enable_half_transfer_interrupt(DMA2, DMA_STREAM0);
+    dma_channel_select(DMA2, DMA_STREAM0, DMA_SxCR_CHSEL_0);
     dma_enable_stream(DMA2, DMA_STREAM0);
 }
 
 void periph_setup()
 {
     clock_setup();
-	gpio_setup();
-	timer_setup();
+    gpio_setup();
+    timer_setup();
     dac_setup();
     adc_setup();
 
@@ -402,19 +402,6 @@ void periph_setup()
     dma_setup(&DAC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_8BIT, DMA_SxCR_PSIZE_8BIT );
     dma_setup(&ADC1_DMAPeriph, 0, 0, 0, DMA_SxCR_MSIZE_16BIT, DMA_SxCR_PSIZE_16BIT );
     */
-}
-
-#include <math.h>
-
-void init_globals()
-{
-	/* Fill the array with funky waveform data */
-	/* This is for single channel 12-bit right aligned */
-	uint16_t i, x;
-	for (i = 0; i < DAC_DMA_BUFFER_SIZE; i++) {
-        uint16_t ch1 = 4095.0f * (1.0f + sinf(10.0f * i * 2 * (float)M_PI / DAC_DMA_BUFFER_SIZE)) / 2;
-		DAC_DMA_buffer[i] = ch1;
-	}
 }
 
 bool dac_push(float ch1) {
